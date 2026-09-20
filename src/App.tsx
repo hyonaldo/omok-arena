@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import './App.css'
+import { playSound } from './audio/sounds'
 import { LocalRoom } from './core/local-room'
 import { BOARD_SIZE, type Position, type Stone } from './core/types'
 import { loadStats, recordResult } from './storage/stats'
@@ -32,11 +33,16 @@ export default function App() {
     if (next === game) return
     setGame(next)
     setCursor(position)
-    if (next.status === 'won' && next.winner) setStats(recordResult(next.winner))
+    playSound('stone')
+    if (next.status === 'won' && next.winner) {
+      setStats(recordResult(next.winner))
+      playSound('victory')
+    }
     if (next.status === 'draw') setStats(recordResult('draw'))
   }
 
   const newGame = () => {
+    playSound('replay')
     setGame(room.reset())
     setCursor({ row: 7, col: 7 })
   }

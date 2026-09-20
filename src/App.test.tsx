@@ -1,10 +1,16 @@
 import '@testing-library/jest-dom/vitest'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from './App'
+import { playSound } from './audio/sounds'
+
+vi.mock('./audio/sounds', () => ({ playSound: vi.fn() }))
 
 describe('local two-player game', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => {
+    localStorage.clear()
+    vi.clearAllMocks()
+  })
   afterEach(cleanup)
 
   it('opens directly on a playable board with quiet match stats', () => {
@@ -27,7 +33,10 @@ describe('local two-player game', () => {
 
     expect(screen.getByRole('dialog')).toHaveTextContent('흑 승리')
     expect(screen.getByText('1판')).toBeInTheDocument()
+    expect(playSound).toHaveBeenCalledWith('stone')
+    expect(playSound).toHaveBeenCalledWith('victory')
     fireEvent.click(screen.getByRole('button', { name: '한 판 더' }))
+    expect(playSound).toHaveBeenCalledWith('replay')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByText('흑 차례')).toBeInTheDocument()
   })
