@@ -43,6 +43,9 @@ describe('Gemini move server adapter', () => {
       },
     })
     expect(request.generationConfig.responseSchema).not.toHaveProperty('additionalProperties')
+    expect(request.generationConfig).toMatchObject({ thinkingConfig: { thinkingLevel: 'low' } })
+    expect(request.generationConfig).not.toHaveProperty('temperature')
+    expect(request.generationConfig).not.toHaveProperty('maxOutputTokens')
     const prompt = request.contents[0].parts[0].text
     expect(prompt).toContain('.......B.......')
     expect(prompt).toContain('백(W)')

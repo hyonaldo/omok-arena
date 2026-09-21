@@ -9,8 +9,7 @@ export type GeminiPosition = {
 type GeminiRequest = {
   contents: Array<{ role: 'user'; parts: Array<{ text: string }> }>
   generationConfig: {
-    temperature: number
-    maxOutputTokens: number
+    thinkingConfig: { thinkingLevel: 'low' }
     responseMimeType: 'application/json'
     responseSchema: Record<string, unknown>
   }
@@ -60,8 +59,7 @@ export function buildGeminiRequest(position: GeminiPosition): GeminiRequest {
   return {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
-      temperature: 0.25,
-      maxOutputTokens: 64,
+      thinkingConfig: { thinkingLevel: 'low' },
       responseMimeType: 'application/json',
       responseSchema: {
         type: 'object',
