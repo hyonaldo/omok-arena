@@ -80,4 +80,15 @@ describe('local two-player game', () => {
     expect(screen.getByText('내 차례')).toBeInTheDocument()
     vi.unstubAllGlobals()
   })
+
+  it('shows a friendly recovery message for a non-JSON server failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('An error occurred', { status: 500 })))
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gemini와 대국' }))
+    fireEvent.click(screen.getByRole('gridcell', { name: '8행 8열 빈자리' }))
+
+    await screen.findByText('Gemini가 응답하지 않았습니다.')
+    expect(screen.getByRole('button', { name: '이번 수는 사람이 두기' })).toBeInTheDocument()
+  })
 })

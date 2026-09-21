@@ -59,7 +59,13 @@ export default function App() {
           moveNumber: position.moves.length,
         }),
       })
-      const data = await response.json() as { move?: Position; error?: string }
+      const responseText = await response.text()
+      let data: { move?: Position; error?: string } = {}
+      try {
+        data = JSON.parse(responseText) as { move?: Position; error?: string }
+      } catch {
+        if (response.ok) throw new Error('Gemini 응답을 읽을 수 없습니다.')
+      }
       if (!response.ok) throw new Error(data.error || 'Gemini가 응답하지 않았습니다.')
       const move = data.move
       if (!move || !Number.isInteger(move.row) || !Number.isInteger(move.col)
