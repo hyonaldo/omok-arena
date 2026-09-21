@@ -37,3 +37,7 @@ AI·온라인 대국·아케이드 모드는 현재 구현하지 않았습니다
 
 - Production: https://omok-arena.vercel.app
 - Vercel team: `hyomes`
+- Source: https://github.com/hyonaldo/omok-arena
+
+`main` 브랜치에 push하면 Vercel이 자동으로 빌드·배포합니다.
+Pull Request를 열면 미리보기 배포 URL이 생성됩니다.
