@@ -65,7 +65,6 @@ export function buildGeminiRequest(position: GeminiPosition): GeminiRequest {
       responseMimeType: 'application/json',
       responseSchema: {
         type: 'object',
-        additionalProperties: false,
         required: ['row', 'col'],
         properties: {
           row: { type: 'integer', minimum: 0, maximum: 14 },

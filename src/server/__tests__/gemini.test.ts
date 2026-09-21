@@ -42,6 +42,7 @@ describe('Gemini move server adapter', () => {
         col: { minimum: 0, maximum: 14 },
       },
     })
+    expect(request.generationConfig.responseSchema).not.toHaveProperty('additionalProperties')
     const prompt = request.contents[0].parts[0].text
     expect(prompt).toContain('.......B.......')
     expect(prompt).toContain('백(W)')
