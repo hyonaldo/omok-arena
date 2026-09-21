@@ -18,6 +18,10 @@
 .mini-stone.black { background: #171715; }
 .mini-stone.white { background: white; border: 1px solid #aaa49a; }
 .play-area { display: grid; justify-items: center; align-content: center; gap: 12px; min-height: 0; }
+.mode-switch { display: inline-flex; padding: 3px; border: 1px solid rgba(66,59,49,.12); border-radius: 999px; background: rgba(255,255,255,.58); box-shadow: 0 6px 20px rgba(65,52,33,.05); }
+.mode-switch button { min-height: 36px; padding: 0 16px; border: 0; border-radius: 999px; color: #776f63; background: transparent; font-size: 13px; font-weight: 700; cursor: pointer; transition: color .15s ease, background .15s ease, box-shadow .15s ease; }
+.mode-switch button[aria-pressed="true"] { color: #251b12; background: #fffdf8; box-shadow: 0 2px 8px rgba(65,52,33,.12); }
+.mode-switch button:focus-visible, .ai-error button:focus-visible, .point:focus-visible, .again-button:focus-visible { outline: 3px solid #d36a48; outline-offset: 2px; }
 .turn-card { display: flex; align-items: center; gap: 11px; padding: 8px 16px 8px 10px; border: 1px solid rgba(66,59,49,.1); border-radius: 999px; background: rgba(255,255,255,.66); box-shadow: 0 8px 30px rgba(65,52,33,.06); }
 .turn-card > span:last-child { display: grid; gap: 1px; }
 .turn-card small { color: #8a8378; font-size: 10px; font-weight: 600; letter-spacing: .08em; }
@@ -25,7 +29,8 @@
 .turn-stone { width: 29px; aspect-ratio: 1; border-radius: 50%; box-shadow: inset -4px -5px 8px rgba(0,0,0,.19), 0 2px 5px rgba(0,0,0,.2); }
 .turn-stone.black { background: radial-gradient(circle at 35% 28%, #5a5955, #171715 54%); }
 .turn-stone.white { background: radial-gradient(circle at 35% 28%, white, #e6e2d9 65%); border: 1px solid #c8c1b5; box-shadow: 0 2px 5px rgba(0,0,0,.13); }
-.board-frame { width: min(94vw, calc(100dvh - 176px), 680px); aspect-ratio: 1; padding: clamp(6px, 1.4vw, 12px); border-radius: clamp(14px, 2.4vw, 24px); background: #5b3920; box-shadow: 0 22px 55px rgba(58,39,20,.23), 0 3px 10px rgba(58,39,20,.2); }
+.turn-card.thinking .turn-stone { animation: think 1s ease-in-out infinite alternate; }
+.board-frame { width: min(94vw, calc(100dvh - 224px), 680px); aspect-ratio: 1; padding: clamp(6px, 1.4vw, 12px); border-radius: clamp(14px, 2.4vw, 24px); background: #5b3920; box-shadow: 0 22px 55px rgba(58,39,20,.23), 0 3px 10px rgba(58,39,20,.2); }
 .board { width: 100%; height: 100%; position: relative; overflow: hidden; border-radius: clamp(9px, 1.8vw, 16px); background: radial-gradient(circle at 18% 8%, rgba(255,255,255,.22), transparent 22%), repeating-linear-gradient(92deg, rgba(102,56,21,.025) 0 2px, transparent 2px 18px), #ddb26c; box-shadow: inset 0 0 28px rgba(89,50,18,.16); touch-action: manipulation; }
 .board-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
 .board-lines line { stroke: #654820; stroke-width: .034; opacity: .8; }
@@ -48,16 +53,23 @@
 .again-button { min-width: 190px; min-height: 54px; margin-top: 8px; padding: 0 28px; border: 0; border-radius: 999px; color: #261a10; background: #f7c768; font-size: 17px; font-weight: 700; box-shadow: 0 8px 24px rgba(0,0,0,.23); cursor: pointer; transition: transform .15s ease, background .15s ease; }
 .again-button:hover { background: #ffd37c; transform: translateY(-1px); }
 .again-button:active { transform: translateY(1px) scale(.99); }
+.game-footer { display: grid; justify-items: center; gap: 8px; min-height: 18px; }
+.ai-error { display: flex; align-items: center; gap: 12px; max-width: min(94vw, 680px); padding: 8px 10px 8px 14px; border: 1px solid rgba(159,70,43,.18); border-radius: 14px; color: #70402f; background: #fff8ee; font-size: 12px; box-shadow: 0 7px 22px rgba(75,49,28,.07); }
+.ai-error > div { display: flex; gap: 6px; }
+.ai-error button { min-height: 34px; padding: 0 11px; border: 1px solid rgba(80,59,39,.14); border-radius: 999px; color: #4d3928; background: white; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.ai-error button:last-child { color: white; border-color: #5d3c23; background: #5d3c23; }
 .hint { margin: 0; color: #898175; font-size: 12px; }
 @keyframes place { from { transform: scale(.45); opacity: .45; } to { transform: scale(1); opacity: 1; } }
 @keyframes reveal { from { opacity: 0; } to { opacity: 1; } }
+@keyframes think { from { transform: translateY(-1px); } to { transform: translateY(2px); } }
 @media (min-width: 820px) and (min-aspect-ratio: 4/3) {
   .topbar { position: relative; z-index: 2; }
-  .play-area { width: min(100%, 1100px); margin: 0 auto; grid-template-columns: 160px auto 160px; grid-template-rows: 1fr auto; column-gap: clamp(22px, 3vw, 42px); }
-  .turn-card { grid-column: 1; grid-row: 1; align-self: center; border-radius: 18px; padding: 16px; flex-direction: column; text-align: center; }
+  .play-area { width: min(100%, 1100px); margin: 0 auto; grid-template-columns: 160px auto 160px; grid-template-rows: auto 1fr auto; column-gap: clamp(22px, 3vw, 42px); }
+  .mode-switch { grid-column: 1 / -1; grid-row: 1; }
+  .turn-card { grid-column: 1; grid-row: 2; align-self: center; border-radius: 18px; padding: 16px; flex-direction: column; text-align: center; }
   .turn-stone { width: 46px; }
-  .board-frame { grid-column: 2; grid-row: 1; width: min(calc(100dvh - 96px), calc(100vw - 430px), 720px); }
-  .hint { grid-column: 2; grid-row: 2; }
+  .board-frame { grid-column: 2; grid-row: 2; width: min(calc(100dvh - 160px), calc(100vw - 430px), 720px); }
+  .game-footer { grid-column: 2; grid-row: 3; }
 }
 @media (max-width: 560px) {
   .game-shell { padding-left: 9px; padding-right: 9px; }
@@ -67,9 +79,11 @@
   .stats > span { padding: 5px 6px; }
   .score .mini-stone { display: none; }
   .play-area { gap: 9px; }
-  .board-frame { width: min(calc(100vw - 18px), calc(100dvh - 160px)); padding: 6px; border-radius: 15px; }
+  .mode-switch button { min-height: 34px; padding: 0 13px; font-size: 12px; }
+  .board-frame { width: min(calc(100vw - 18px), calc(100dvh - 204px)); padding: 6px; border-radius: 15px; }
   .turn-card { padding-top: 6px; padding-bottom: 6px; }
   .turn-stone { width: 25px; }
+  .ai-error { flex-direction: column; gap: 7px; text-align: center; }
   .hint { font-size: 11px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

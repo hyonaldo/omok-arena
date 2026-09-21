@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [
@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         name: 'Hyomes 오목',
         short_name: '오목',
-        description: '한 기기에서 바로 두는 2인용 오목',
+        description: '둘이 두거나 Gemini와 겨루는 오목',
         theme_color: '#e0b36d',
         background_color: '#f4f0e7',
         display: 'standalone',
@@ -29,5 +29,6 @@ export default defineConfig({
   ],
   test: {
     environment: 'jsdom',
+    exclude: [...configDefaults.exclude, 'e2e/**'],
   },
 })
