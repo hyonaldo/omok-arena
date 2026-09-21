@@ -89,8 +89,18 @@ export function parseGeminiMove(value: unknown, board: Cell[][]): Position {
   if (!Number.isInteger(row) || !Number.isInteger(col) || row! < 0 || row! >= BOARD_SIZE || col! < 0 || col! >= BOARD_SIZE) {
     throw new Error('Gemini 착수 좌표가 범위를 벗어났습니다.')
   }
-  if (board[row!][col!] !== null) throw new Error('Gemini가 이미 돌이 놓인 자리를 선택했습니다.')
-  return { row: row!, col: col! }
+  if (board[row!][col!] === null) return { row: row!, col: col! }
+  for (let distance = 1; distance < BOARD_SIZE * 2; distance += 1) {
+    for (let candidateRow = 0; candidateRow < BOARD_SIZE; candidateRow += 1) {
+      for (let candidateCol = 0; candidateCol < BOARD_SIZE; candidateCol += 1) {
+        if (Math.abs(candidateRow - row!) + Math.abs(candidateCol - col!) === distance
+          && board[candidateRow][candidateCol] === null) {
+          return { row: candidateRow, col: candidateCol }
+        }
+      }
+    }
+  }
+  throw new Error('오목판에 둘 수 있는 자리가 없습니다.')
 }
 
 export async function requestGeminiMove({

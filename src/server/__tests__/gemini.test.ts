@@ -51,13 +51,13 @@ describe('Gemini move server adapter', () => {
     expect(prompt).toContain('백(W)')
   })
 
-  it('parses a legal move and rejects occupied or malformed output', () => {
+  it('parses a legal move and repairs an occupied output to the nearest legal point', () => {
     const board = emptyBoard()
     board[7][7] = 'black'
     expect(parseGeminiMove({ candidates: [{ content: { parts: [{ text: '{"row":7,"col":8}' }] } }] }, board))
       .toEqual({ row: 7, col: 8 })
-    expect(() => parseGeminiMove({ candidates: [{ content: { parts: [{ text: '{"row":7,"col":7}' }] } }] }, board))
-      .toThrow('이미 돌')
+    expect(parseGeminiMove({ candidates: [{ content: { parts: [{ text: '{"row":7,"col":7}' }] } }] }, board))
+      .toEqual({ row: 6, col: 7 })
     expect(() => parseGeminiMove({ candidates: [] }, board)).toThrow('응답')
   })
 
