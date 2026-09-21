@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         name: 'Hyomes 오목',
         short_name: '오목',
-        description: '둘이 두거나 Gemini와 겨루는 오목',
+        description: '둘이 두거나 Groq과 겨루는 오목',
         theme_color: '#e0b36d',
         background_color: '#f4f0e7',
         display: 'standalone',

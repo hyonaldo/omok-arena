@@ -4,7 +4,7 @@ export const config = { runtime: 'edge' }
 
 export default function handler(request: Request) {
   return handleAiMove(request, {
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-    GEMINI_MODEL: process.env.GEMINI_MODEL,
+    GROQ_API_KEY: process.env.GROQ_API_KEY,
+    GROQ_MODEL: process.env.GROQ_MODEL,
   })
 }

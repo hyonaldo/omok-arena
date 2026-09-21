@@ -1,9 +1,12 @@
-import { MoveRequestError, requestGeminiMove, validateMoveRequest } from './gemini'
+import { MoveRequestError, requestGroqMove, validateMoveRequest } from './groq'
 
-type GeminiEnvironment = {
-  GEMINI_API_KEY?: string
-  GEMINI_MODEL?: string
+type GroqEnvironment = {
+  GROQ_API_KEY?: string
+  GROQ_MODEL?: string
 }
+
+// 가장 가볍고 빠르며 무료 한도 내에서 strict JSON 출력을 지원하는 Groq 모델.
+export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b'
 
 const json = (body: unknown, status: number) => Response.json(body, {
   status,
@@ -15,11 +18,11 @@ const json = (body: unknown, status: number) => Response.json(body, {
 
 export async function handleAiMove(
   request: Request,
-  environment: GeminiEnvironment,
+  environment: GroqEnvironment,
   fetcher: typeof fetch = fetch,
 ): Promise<Response> {
   if (request.method !== 'POST') return json({ error: 'POST 요청만 지원합니다.' }, 405)
-  if (!environment.GEMINI_API_KEY) return json({ error: 'AI 대국이 아직 준비되지 않았습니다.' }, 503)
+  if (!environment.GROQ_API_KEY) return json({ error: 'AI 대국이 아직 준비되지 않았습니다.' }, 503)
 
   let input: unknown
   try {
@@ -30,26 +33,14 @@ export async function handleAiMove(
 
   try {
     const position = validateMoveRequest(input)
-    const models = environment.GEMINI_MODEL
-      ? [environment.GEMINI_MODEL]
-      : ['gemini-3.5-flash', 'gemini-3.5-flash-lite']
-    let lastError: unknown
-    for (const model of models) {
-      try {
-        const move = await requestGeminiMove({
-          apiKey: environment.GEMINI_API_KEY,
-          model,
-          position,
-          fetcher,
-          signal: AbortSignal.timeout(20_000),
-        })
-        return json({ move }, 200)
-      } catch (error) {
-        lastError = error
-        if (error instanceof Error && error.message.includes('무료 사용량')) break
-      }
-    }
-    throw lastError
+    const move = await requestGroqMove({
+      apiKey: environment.GROQ_API_KEY,
+      model: environment.GROQ_MODEL || DEFAULT_GROQ_MODEL,
+      position,
+      fetcher,
+      signal: AbortSignal.timeout(20_000),
+    })
+    return json({ move }, 200)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'AI 착수에 실패했습니다.'
     if (error instanceof MoveRequestError) return json({ error: message }, 400)

@@ -64,14 +64,14 @@ export default function App() {
       try {
         data = JSON.parse(responseText) as { move?: Position; error?: string }
       } catch {
-        if (response.ok) throw new Error('Gemini 응답을 읽을 수 없습니다.')
+        if (response.ok) throw new Error('Groq 응답을 읽을 수 없습니다.')
       }
-      if (!response.ok) throw new Error(data.error || 'Gemini가 응답하지 않았습니다.')
+      if (!response.ok) throw new Error(data.error || 'Groq이 응답하지 않았습니다.')
       const move = data.move
       if (!move || !Number.isInteger(move.row) || !Number.isInteger(move.col)
         || move.row < 0 || move.row >= BOARD_SIZE || move.col < 0 || move.col >= BOARD_SIZE
         || position.board[move.row][move.col] !== null) {
-        throw new Error('Gemini가 둘 수 없는 자리를 선택했습니다.')
+        throw new Error('Groq이 둘 수 없는 자리를 선택했습니다.')
       }
       if (currentRequest !== requestId.current || room.state !== position || room.state.turn !== 'white') return
       const next = room.submitMove(move)
@@ -80,7 +80,7 @@ export default function App() {
       commitGame(next)
     } catch (error) {
       if (currentRequest !== requestId.current) return
-      setAiError(error instanceof Error ? error.message : 'Gemini가 응답하지 않았습니다.')
+      setAiError(error instanceof Error ? error.message : 'Groq이 응답하지 않았습니다.')
     } finally {
       if (currentRequest === requestId.current) setIsAiThinking(false)
     }
@@ -141,7 +141,7 @@ export default function App() {
 
   const resultTitle = game.status === 'draw' ? '무승부' : `${stoneName(game.winner!)} 승리`
   const turnTitle = mode === 'ai'
-    ? isAiThinking ? 'Gemini 생각 중…' : game.turn === 'black' ? '내 차례' : manualAiTurn ? '백돌을 놓아주세요' : 'Gemini 차례'
+    ? isAiThinking ? 'Groq 생각 중…' : game.turn === 'black' ? '내 차례' : manualAiTurn ? '백돌을 놓아주세요' : 'Groq 차례'
     : `${stoneName(game.turn)} 차례`
   const boardLocked = game.status !== 'playing' || isAiThinking || (mode === 'ai' && game.turn === 'white' && !manualAiTurn)
 
@@ -159,10 +159,10 @@ export default function App() {
         </div>
       </header>
 
-      <section className="play-area" aria-label={mode === 'ai' ? 'Gemini 대국' : '로컬 2인 대국'}>
+      <section className="play-area" aria-label={mode === 'ai' ? 'Groq 대국' : '로컬 2인 대국'}>
         <div className="mode-switch" role="group" aria-label="대국 방식">
           <button type="button" aria-pressed={mode === 'local'} onClick={() => changeMode('local')}>둘이 두기</button>
-          <button type="button" aria-pressed={mode === 'ai'} onClick={() => changeMode('ai')}>Gemini와 대국</button>
+          <button type="button" aria-pressed={mode === 'ai'} onClick={() => changeMode('ai')}>Groq과 대국</button>
         </div>
 
         <aside className={`turn-card ${game.turn} ${isAiThinking ? 'thinking' : ''}`} aria-live="polite">

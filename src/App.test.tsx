@@ -44,7 +44,7 @@ describe('local two-player game', () => {
     expect(screen.getByText('흑 차례')).toBeInTheDocument()
   })
 
-  it('lets the player switch to Gemini and receives a validated white move', async () => {
+  it('lets the player switch to Groq and receives a validated white move', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ move: { row: 6, col: 7 } }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -52,9 +52,9 @@ describe('local two-player game', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Gemini와 대국' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Groq과 대국' }))
     fireEvent.click(screen.getByRole('gridcell', { name: '8행 8열 빈자리' }))
-    expect(screen.getByText('Gemini 생각 중…')).toBeInTheDocument()
+    expect(screen.getByText('Groq 생각 중…')).toBeInTheDocument()
 
     await waitFor(() => expect(screen.getByRole('gridcell', { name: '7행 8열 백돌' })).toBeInTheDocument())
     expect(screen.getByText('내 차례')).toBeInTheDocument()
@@ -64,14 +64,14 @@ describe('local two-player game', () => {
     vi.unstubAllGlobals()
   })
 
-  it('keeps the game playable when Gemini is unavailable', async () => {
+  it('keeps the game playable when Groq is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: '무료 사용량을 모두 사용했습니다.' }), {
       status: 429,
       headers: { 'Content-Type': 'application/json' },
     })))
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Gemini와 대국' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Groq과 대국' }))
     fireEvent.click(screen.getByRole('gridcell', { name: '8행 8열 빈자리' }))
     await screen.findByText('무료 사용량을 모두 사용했습니다.')
     fireEvent.click(screen.getByRole('button', { name: '이번 수는 사람이 두기' }))
@@ -85,10 +85,10 @@ describe('local two-player game', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('An error occurred', { status: 500 })))
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Gemini와 대국' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Groq과 대국' }))
     fireEvent.click(screen.getByRole('gridcell', { name: '8행 8열 빈자리' }))
 
-    await screen.findByText('Gemini가 응답하지 않았습니다.')
+    await screen.findByText('Groq이 응답하지 않았습니다.')
     expect(screen.getByRole('button', { name: '이번 수는 사람이 두기' })).toBeInTheDocument()
   })
 })

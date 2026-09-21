@@ -14,14 +14,14 @@ test('a local two-player match can finish and restart', async ({ page }) => {
   await expect(page.getByText('흑 차례')).toBeVisible()
 })
 
-test('Gemini mode locks its turn and applies the server move', async ({ page }) => {
+test('Groq mode locks its turn and applies the server move', async ({ page }) => {
   await page.route('**/api/ai-move', async (route) => {
     const request = route.request().postDataJSON()
     expect(request).toMatchObject({ aiColor: 'white', moveNumber: 1 })
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ move: { row: 6, col: 7 } }) })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Gemini와 대국' }).click()
+  await page.getByRole('button', { name: 'Groq과 대국' }).click()
   await point(page, 7, 7).click()
   await expect(page.getByRole('gridcell', { name: '7행 8열 백돌' })).toBeVisible()
   await expect(page.getByText('내 차례')).toBeVisible()
@@ -29,7 +29,7 @@ test('Gemini mode locks its turn and applies the server move', async ({ page }) 
 
 test('the board and primary controls fit inside a mobile viewport', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('button', { name: 'Gemini와 대국' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Groq과 대국' })).toBeVisible()
   const box = await page.getByRole('grid', { name: '오목판' }).boundingBox()
   expect(box).not.toBeNull()
   expect(box!.x).toBeGreaterThanOrEqual(0)
