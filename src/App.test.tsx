@@ -60,14 +60,37 @@ describe('local two-player game', () => {
     expect(screen.getByText('내 차례')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledOnce()
     const [, request] = fetchMock.mock.calls[0]
-    expect(JSON.parse(request.body)).toMatchObject({ aiColor: 'white', moveNumber: 1 })
+    expect(JSON.parse(request.body)).toMatchObject({ aiColor: 'white', moveNumber: 1, lastMove: { row: 7, col: 7 } })
     vi.unstubAllGlobals()
   })
 
-  it('keeps the game playable when Groq is unavailable', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: '무료 사용량을 모두 사용했습니다.' }), {
+  it('waits out a short rate limit and retries automatically', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: '잠시 대기', retryAfter: 2 }), {
+        status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '2' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ move: { row: 6, col: 7 } }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Groq과 대국' }))
+    fireEvent.click(screen.getByRole('gridcell', { name: '8행 8열 빈자리' }))
+
+    await screen.findByText(/Groq 대기 중… \d+초/)
+    expect(screen.queryByRole('button', { name: '이번 수는 사람이 두기' })).not.toBeInTheDocument()
+    await vi.advanceTimersByTimeAsync(2_500)
+    await waitFor(() => expect(screen.getByRole('gridcell', { name: '7행 8열 백돌' })).toBeInTheDocument())
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+  })
+
+  it('keeps the game playable when Groq stays unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: '무료 사용량을 모두 사용했습니다.', retryAfter: 600 }), {
       status: 429,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '600' },
     })))
     render(<App />)
 

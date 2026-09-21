@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildGroqRequest,
   parseGroqMove,
+  RateLimitError,
   requestGroqMove,
   validateMoveRequest,
 } from '../groq'
@@ -34,6 +35,31 @@ describe('Groq move server adapter', () => {
     expect(() => validateMoveRequest({ board, aiColor: 'white', moveNumber: 3 })).toThrow('착수 기록')
   })
 
+  it('accepts an optional lastMove only when it points at a black stone', () => {
+    const board = emptyBoard()
+    board[7][7] = 'black'
+    expect(validateMoveRequest({ board, aiColor: 'white', moveNumber: 1, lastMove: { row: 7, col: 7 } }).lastMove)
+      .toEqual({ row: 7, col: 7 })
+    expect(() => validateMoveRequest({ board, aiColor: 'white', moveNumber: 1, lastMove: { row: 0, col: 0 } })).toThrow('마지막 수')
+    expect(() => validateMoveRequest({ board, aiColor: 'white', moveNumber: 1, lastMove: { row: 99, col: 0 } })).toThrow('마지막 수')
+  })
+
+  it('describes the position as compact coordinates instead of a text grid', () => {
+    const board = emptyBoard()
+    board[7][7] = 'black'
+    board[8][8] = 'black'
+    board[6][7] = 'white'
+    const request = buildGroqRequest({ board, aiColor: 'white', moveNumber: 3, lastMove: { row: 8, col: 8 } }, 'openai/gpt-oss-120b')
+    const userPrompt = request.messages.find((message) => message.role === 'user')!.content
+    const systemPrompt = request.messages.find((message) => message.role === 'system')!.content
+    expect(userPrompt).toContain('흑(상대): (7,7) (8,8)')
+    expect(userPrompt).toContain('백(당신): (6,7)')
+    expect(userPrompt).toContain('상대의 마지막 수: (8,8)')
+    expect(userPrompt).not.toContain('...............')
+    expect(systemPrompt).toContain('(행,열)')
+    expect(systemPrompt).toContain('(0,0)')
+  })
+
   it('builds a strict JSON-schema chat request without arbitrary user prompts', () => {
     const board = emptyBoard()
     board[7][7] = 'black'
@@ -55,8 +81,8 @@ describe('Groq move server adapter', () => {
       },
     })
     const userPrompt = request.messages.find((message) => message.role === 'user')!.content
-    expect(userPrompt).toContain('.......B.......')
-    expect(userPrompt).toContain('백(W)')
+    expect(userPrompt).toContain('(7,7)')
+    expect(userPrompt).toContain('백(당신): 없음')
   })
 
   it('parses a legal move and repairs an occupied output to the nearest legal point', () => {
@@ -87,11 +113,14 @@ describe('Groq move server adapter', () => {
     expect(init.headers.Authorization).toBe('Bearer secret-test-key')
 
     const limited = vi.fn().mockResolvedValue(new Response('{}', { status: 429, headers: { 'retry-after': '12' } }))
-    await expect(requestGroqMove({
+    const failure = await requestGroqMove({
       apiKey: 'k',
       model: 'openai/gpt-oss-20b',
       position: { board: emptyBoard(), aiColor: 'white', moveNumber: 0 },
       fetcher: limited,
-    })).rejects.toThrow('무료 사용량')
+    }).catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(RateLimitError)
+    expect((failure as RateLimitError).retryAfterSeconds).toBe(12)
+    expect((failure as Error).message).toContain('무료 사용량')
   })
 })

@@ -16,7 +16,7 @@ describe('AI move API handler', () => {
     expect(postResponse.status).toBe(503)
   })
 
-  it('returns one validated move using the lightweight Groq model by default', async () => {
+  it('returns one validated move using the 120B Groq model by default', async () => {
     const position = board()
     position[7][7] = 'black'
     const fetcher = vi.fn().mockResolvedValue(new Response(groqResponse('{"row":7,"col":8}'), {
@@ -33,10 +33,10 @@ describe('AI move API handler', () => {
     expect(response.headers.get('Cache-Control')).toBe('no-store')
     expect(fetcher).toHaveBeenCalledOnce()
     const sent = JSON.parse(fetcher.mock.calls[0][1].body)
-    expect(sent.model).toBe('openai/gpt-oss-20b')
+    expect(sent.model).toBe('openai/gpt-oss-120b')
   })
 
-  it('honours GROQ_MODEL when set and maps quota errors to 429', async () => {
+  it('honours GROQ_MODEL when set', async () => {
     const position = board()
     position[7][7] = 'black'
     const fetcher = vi.fn().mockResolvedValue(new Response(groqResponse('{"row":7,"col":8}'), {
@@ -44,14 +44,44 @@ describe('AI move API handler', () => {
     }))
     await handleAiMove(new Request('https://example.test/api/ai-move', {
       method: 'POST', body: JSON.stringify({ board: position, aiColor: 'white', moveNumber: 1 }),
-    }), { GROQ_API_KEY: 'hidden-key', GROQ_MODEL: 'openai/gpt-oss-120b' }, fetcher)
-    expect(JSON.parse(fetcher.mock.calls[0][1].body).model).toBe('openai/gpt-oss-120b')
+    }), { GROQ_API_KEY: 'hidden-key', GROQ_MODEL: 'openai/gpt-oss-20b' }, fetcher)
+    expect(JSON.parse(fetcher.mock.calls[0][1].body).model).toBe('openai/gpt-oss-20b')
+  })
 
-    const limited = vi.fn().mockResolvedValue(new Response('{}', { status: 429 }))
+  it('waits and retries once inside the function when Groq asks for a short pause', async () => {
+    const position = board()
+    position[7][7] = 'black'
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 429, headers: { 'retry-after': '3' } }))
+      .mockResolvedValueOnce(new Response(groqResponse('{"row":7,"col":8}'), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }))
+    const sleep = vi.fn().mockResolvedValue(undefined)
+
     const response = await handleAiMove(new Request('https://example.test/api/ai-move', {
       method: 'POST', body: JSON.stringify({ board: position, aiColor: 'white', moveNumber: 1 }),
-    }), { GROQ_API_KEY: 'hidden-key' }, limited)
+    }), { GROQ_API_KEY: 'hidden-key' }, fetcher, sleep)
+
+    expect(response.status).toBe(200)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(sleep).toHaveBeenCalledWith(3000)
+  })
+
+  it('returns 429 with Retry-After when the pause is too long to absorb', async () => {
+    const position = board()
+    position[7][7] = 'black'
+    const limited = vi.fn().mockResolvedValue(new Response('{}', { status: 429, headers: { 'retry-after': '45' } }))
+    const sleep = vi.fn()
+
+    const response = await handleAiMove(new Request('https://example.test/api/ai-move', {
+      method: 'POST', body: JSON.stringify({ board: position, aiColor: 'white', moveNumber: 1 }),
+    }), { GROQ_API_KEY: 'hidden-key' }, limited, sleep)
+
     expect(response.status).toBe(429)
+    expect(response.headers.get('Retry-After')).toBe('45')
+    expect(await response.json()).toMatchObject({ retryAfter: 45 })
+    expect(sleep).not.toHaveBeenCalled()
+    expect(limited).toHaveBeenCalledOnce()
   })
 
   it('returns a safe message for malformed game input', async () => {

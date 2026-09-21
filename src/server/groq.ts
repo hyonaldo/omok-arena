@@ -4,6 +4,7 @@ export type MovePosition = {
   board: Cell[][]
   aiColor: Stone
   moveNumber: number
+  lastMove?: Position
 }
 
 type ChatMessage = { role: 'system' | 'user'; content: string }
@@ -28,6 +29,21 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
 export class MoveRequestError extends Error {}
 
+export class RateLimitError extends Error {
+  readonly retryAfterSeconds: number
+  constructor(retryAfterSeconds: number) {
+    super(`AI 무료 사용량을 모두 사용했습니다. ${retryAfterSeconds}초 후 다시 시도하세요.`)
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
+const isPosition = (value: unknown): value is Position => {
+  if (!value || typeof value !== 'object') return false
+  const { row, col } = value as Partial<Position>
+  return Number.isInteger(row) && Number.isInteger(col)
+    && row! >= 0 && row! < BOARD_SIZE && col! >= 0 && col! < BOARD_SIZE
+}
+
 export function validateMoveRequest(value: unknown): MovePosition {
   if (!value || typeof value !== 'object') throw new MoveRequestError('대국 정보가 없습니다.')
   const input = value as Partial<MovePosition>
@@ -44,26 +60,42 @@ export function validateMoveRequest(value: unknown): MovePosition {
   const whiteCount = cells.filter((cell) => cell === 'white').length
   if (blackCount + whiteCount !== input.moveNumber) throw new MoveRequestError('착수 기록과 오목판이 일치하지 않습니다.')
   if (blackCount !== whiteCount + 1) throw new MoveRequestError('현재는 AI가 둘 차례가 아닙니다.')
+  if (input.lastMove !== undefined) {
+    if (!isPosition(input.lastMove) || input.board[input.lastMove.row][input.lastMove.col] !== 'black') {
+      throw new MoveRequestError('마지막 수 정보가 오목판과 일치하지 않습니다.')
+    }
+  }
   return input as MovePosition
 }
 
-function renderBoard(board: Cell[][]) {
-  return board.map((row) => row.map((cell) => cell === 'black' ? 'B' : cell === 'white' ? 'W' : '.').join('')).join('\n')
+const coordinate = ({ row, col }: Position) => `(${row},${col})`
+
+function listStones(board: Cell[][], stone: Stone) {
+  const points: string[] = []
+  board.forEach((row, rowIndex) => row.forEach((cell, colIndex) => {
+    if (cell === stone) points.push(coordinate({ row: rowIndex, col: colIndex }))
+  }))
+  return points.length ? points.join(' ') : '없음'
 }
 
 export function buildGroqRequest(position: MovePosition, model: string): GroqRequest {
-  const color = position.aiColor === 'black' ? '흑(B)' : '백(W)'
-  const opponent = position.aiColor === 'black' ? '백(W)' : '흑(B)'
+  const me: Stone = position.aiColor
+  const opponent: Stone = me === 'black' ? 'white' : 'black'
+  const name = (stone: Stone) => stone === 'black' ? '흑' : '백'
   const system = [
     '당신은 15×15 자유 오목의 강한 대국자입니다.',
-    '가로·세로·대각선으로 5개 이상 연속이면 승리합니다. 장목은 허용됩니다.',
-    '우선순위: 1) 즉시 승리 2) 상대의 즉시 승리 차단 3) 열린 4와 열린 3 형성·차단 4) 중앙 연결성.',
-    '반드시 빈 교차점(.) 하나만 선택하고, 요청된 JSON만 반환하십시오. row와 col은 0부터 14까지입니다.',
+    '좌표 표기: 모든 점은 (행,열)이며 0부터 14까지의 정수입니다. (0,0)은 왼쪽 위, (14,14)는 오른쪽 아래, (7,7)은 중앙입니다.',
+    '이웃 관계: 같은 행에서 열이 1씩 차이나면 가로로 인접, 같은 열에서 행이 1씩 차이나면 세로로 인접, 행과 열이 함께 1씩 변하면 대각선으로 인접합니다.',
+    '규칙: 가로·세로·대각선으로 같은 색 돌 5개 이상이 연속되면 승리합니다. 장목도 승리입니다.',
+    '우선순위: 1) 내가 즉시 5를 만들 수 있으면 그 점 2) 상대가 다음 수에 5를 만들 수 있으면 그 점을 차단 3) 상대의 열린 4·열린 3을 막고 내 열린 4·열린 3을 만들기 4) 기존 돌과 연결되는 중앙 쪽 점.',
+    '목록에 없는 점만 비어 있습니다. 반드시 비어 있는 점 하나를 선택하고, 요청된 JSON만 반환하십시오.',
   ].join('\n')
   const user = [
-    `당신은 ${color}, 상대는 ${opponent}입니다. B=흑, W=백, .=빈자리입니다.`,
-    `현재 ${position.moveNumber}수째 이후의 보드:`,
-    renderBoard(position.board),
+    `당신은 ${name(me)}, 상대는 ${name(opponent)}입니다. 현재 ${position.moveNumber}수가 놓였습니다.`,
+    `${name(opponent)}(상대): ${listStones(position.board, opponent)}`,
+    `${name(me)}(당신): ${listStones(position.board, me)}`,
+    position.lastMove ? `상대의 마지막 수: ${coordinate(position.lastMove)}` : '',
+    '당신의 다음 한 수를 선택하세요.',
   ].join('\n')
 
   return {
@@ -145,8 +177,10 @@ export async function requestGroqMove({
     signal,
   })
   if (!response.ok) {
-    const retryAfter = response.headers.get('retry-after')
-    if (response.status === 429) throw new Error(`AI 무료 사용량을 모두 사용했습니다.${retryAfter ? ` ${retryAfter}초 후 다시 시도하세요.` : ''}`)
+    if (response.status === 429) {
+      const retryAfter = Number.parseFloat(response.headers.get('retry-after') ?? '')
+      throw new RateLimitError(Number.isFinite(retryAfter) && retryAfter > 0 ? Math.ceil(retryAfter) : 15)
+    }
     throw new Error(`AI 요청에 실패했습니다. (${response.status})`)
   }
   return parseGroqMove(await response.json(), position.board)

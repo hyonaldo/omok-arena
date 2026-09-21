@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import './App.css'
+import { RequestPacer } from './agent/pacer'
 import { playSound } from './audio/sounds'
 import { LocalRoom } from './core/local-room'
 import { BOARD_SIZE, type GameState, type Position, type Stone } from './core/types'
@@ -8,6 +9,12 @@ import { loadStats, recordResult } from './storage/stats'
 const stoneName = (stone: Stone) => stone === 'black' ? '흑' : '백'
 const pointKey = ({ row, col }: Position) => `${row}-${col}`
 type GameMode = 'local' | 'ai'
+// 이 시간 이하의 Retry-After는 사용자에게 카운트다운을 보여주며 자동 재시도한다.
+// 그보다 길면 사용자가 직접 재요청하거나 대신 두도록 선택지를 준다.
+const MAX_AUTO_WAIT_SECONDS = 45
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+// 렌더 밖(이벤트 핸들러)에서만 호출되는 시계. 컴포넌트 본문에서 Date.now를 직접 부르지 않기 위해 분리.
+const clockNow = () => Date.now()
 
 function BoardLines() {
   const lines = Array.from({ length: BOARD_SIZE }, (_, index) => index + 1)
@@ -28,9 +35,11 @@ export default function App() {
   const [cursor, setCursor] = useState<Position>({ row: 7, col: 7 })
   const [mode, setMode] = useState<GameMode>('local')
   const [isAiThinking, setIsAiThinking] = useState(false)
+  const [aiWaitSeconds, setAiWaitSeconds] = useState<number | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
   const [manualAiTurn, setManualAiTurn] = useState(false)
   const requestId = useRef(0)
+  const pacer = useMemo(() => new RequestPacer(), [])
   const winningPoints = new Set(game.winningLine.map(pointKey))
   const lastMove = game.moves.at(-1)
 
@@ -43,6 +52,17 @@ export default function App() {
     if (next.status === 'draw') setStats(recordResult('draw'))
   }
 
+  const sleepWithCountdown = async (ms: number, currentRequest: number) => {
+    const deadline = clockNow() + ms
+    while (true) {
+      const remaining = deadline - clockNow()
+      if (remaining <= 0 || currentRequest !== requestId.current) break
+      setAiWaitSeconds(Math.ceil(remaining / 1000))
+      await wait(Math.min(remaining, 500))
+    }
+    setAiWaitSeconds(null)
+  }
+
   const requestAiMove = async (position: GameState) => {
     const currentRequest = ++requestId.current
     setIsAiThinking(true)
@@ -50,21 +70,44 @@ export default function App() {
     setManualAiTurn(false)
 
     try {
-      const response = await fetch('/api/ai-move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          board: position.board,
-          aiColor: 'white',
-          moveNumber: position.moves.length,
-        }),
+      const last = position.moves.at(-1)
+      const body = JSON.stringify({
+        board: position.board,
+        aiColor: 'white',
+        moveNumber: position.moves.length,
+        lastMove: last ? { row: last.row, col: last.col } : undefined,
       })
-      const responseText = await response.text()
-      let data: { move?: Position; error?: string } = {}
-      try {
-        data = JSON.parse(responseText) as { move?: Position; error?: string }
-      } catch {
-        if (response.ok) throw new Error('Groq 응답을 읽을 수 없습니다.')
+
+      let data: { move?: Position; error?: string; retryAfter?: number } = {}
+      let response: Response
+      // 최대 2회 시도: 첫 요청 + (짧은 Retry-After면) 자동 재시도 1회.
+      for (let attempt = 0; ; attempt += 1) {
+        const delay = pacer.delayBeforeNext()
+        if (delay > 0) await sleepWithCountdown(delay, currentRequest)
+        if (currentRequest !== requestId.current) return
+
+        pacer.markSent()
+        response = await fetch('/api/ai-move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        })
+        const responseText = await response.text()
+        data = {}
+        try {
+          data = JSON.parse(responseText) as typeof data
+        } catch {
+          if (response.ok) throw new Error('Groq 응답을 읽을 수 없습니다.')
+        }
+
+        if (response.status === 429 && attempt === 0) {
+          const retryAfter = data.retryAfter ?? Number.parseInt(response.headers.get('Retry-After') ?? '', 10)
+          if (Number.isFinite(retryAfter) && retryAfter > 0 && retryAfter <= MAX_AUTO_WAIT_SECONDS) {
+            pacer.backOff(retryAfter)
+            continue
+          }
+        }
+        break
       }
       if (!response.ok) throw new Error(data.error || 'Groq이 응답하지 않았습니다.')
       const move = data.move
@@ -82,7 +125,10 @@ export default function App() {
       if (currentRequest !== requestId.current) return
       setAiError(error instanceof Error ? error.message : 'Groq이 응답하지 않았습니다.')
     } finally {
-      if (currentRequest === requestId.current) setIsAiThinking(false)
+      if (currentRequest === requestId.current) {
+        setIsAiThinking(false)
+        setAiWaitSeconds(null)
+      }
     }
   }
 
@@ -105,6 +151,7 @@ export default function App() {
   const resetGame = () => {
     requestId.current += 1
     setIsAiThinking(false)
+    setAiWaitSeconds(null)
     setAiError(null)
     setManualAiTurn(false)
     setGame(room.reset())
@@ -141,7 +188,9 @@ export default function App() {
 
   const resultTitle = game.status === 'draw' ? '무승부' : `${stoneName(game.winner!)} 승리`
   const turnTitle = mode === 'ai'
-    ? isAiThinking ? 'Groq 생각 중…' : game.turn === 'black' ? '내 차례' : manualAiTurn ? '백돌을 놓아주세요' : 'Groq 차례'
+    ? isAiThinking
+      ? aiWaitSeconds !== null ? `Groq 대기 중… ${aiWaitSeconds}초` : 'Groq 생각 중…'
+      : game.turn === 'black' ? '내 차례' : manualAiTurn ? '백돌을 놓아주세요' : 'Groq 차례'
     : `${stoneName(game.turn)} 차례`
   const boardLocked = game.status !== 'playing' || isAiThinking || (mode === 'ai' && game.turn === 'white' && !manualAiTurn)
 

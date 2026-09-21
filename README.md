@@ -25,9 +25,15 @@ npm run dev
 Vercel Production 환경에 다음 값을 설정합니다.
 
 - `GROQ_API_KEY`: GroqCloud 콘솔(https://console.groq.com/keys)에서 발급한 API 키
-- `GROQ_MODEL` (선택): 기본값 `openai/gpt-oss-20b` — 무료 티어에서 가장 가볍고 빠르며 strict JSON Schema 출력을 지원하는 모델
+- `GROQ_MODEL` (선택): 기본값 `openai/gpt-oss-120b` — 무료 티어에서 strict JSON Schema 출력을 지원하는 모델 중 오목 판단력이 더 좋은 쪽. 더 가볍게 쓰려면 `openai/gpt-oss-20b`
 
 API 키는 브라우저 번들에 포함되지 않고 `/api/ai-move` 서버리스 함수에서만 사용됩니다. 별도 기기별 제한은 없으며 모든 사용자가 해당 Groq 조직의 무료 할당량(요청/토큰 한도)을 공유합니다. AI 착수 1회가 API 요청 1회입니다.
+
+### 토큰과 속도 제한
+
+- 판 상태는 이미지나 15×15 텍스트 격자가 아니라 **돌 좌표 목록** `(행,열)`로만 보냅니다. 프롬프트에 좌표계·인접 관계 정의가 포함되어 모델이 좌표로 판을 이해합니다.
+- 클라이언트는 AI 요청 사이에 최소 간격을 두고, 서버가 `429`와 `Retry-After`를 돌려주면 그 시간만큼 카운트다운 후 자동으로 한 번 재요청합니다.
+- 서버 함수는 짧은 `Retry-After`(8초 이하)는 함수 안에서 기다린 뒤 재시도하고, 그보다 길면 `Retry-After` 헤더와 함께 `429`를 그대로 전달합니다.
 
 ## 검증
 
