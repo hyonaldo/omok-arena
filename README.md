@@ -5,7 +5,7 @@
 - 실행 즉시 로컬 2인 대국 시작
 - `Groq과 대국`에서 사용자가 흑, Groq이 백으로 착수
 - 가로·세로·대각선 5목 이상 승리
-- Groq 오류·무료 할당량 소진 시 재요청하거나 사람이 백돌 대신 착수
+- Groq 분당 한도에 닿으면 카운트다운 후 자동 재시도, 오래 막히면 재요청 또는 사람이 백돌 대신 착수
 - 종료 후 `한 판 더` 한 번으로 재대국
 - 착수·승리·재대국을 구분하는 짧은 효과음
 - 총 대국·흑승·백승 기록을 기기 `localStorage`에 보관
@@ -49,7 +49,8 @@ GitHub Actions에서도 단위·통합 테스트, 타입 검사와 프로덕션 
 ## 구조
 
 - `src/core`: UI 및 네트워크에 의존하지 않는 순수 게임 엔진과 `Room` 경계
-- `src/server`: Groq 요청 검증, 프롬프트, strict JSON Schema 응답 검증
+- `src/server`: Groq 요청 검증, 좌표 기반 프롬프트, strict JSON Schema 응답 검증, 429 처리
+- `src/agent`: 요청 페이싱(분당 한도 회피) 로직
 - `src/storage`: 버전이 지정된 로컬 통계 저장소
 - `api/ai-move.ts`: Vercel Edge Function 진입점
 - `src/App.tsx`: 로컬 2인 및 Groq 대국 UI

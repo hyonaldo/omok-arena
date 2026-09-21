@@ -17,7 +17,7 @@ test('a local two-player match can finish and restart', async ({ page }) => {
 test('Groq mode locks its turn and applies the server move', async ({ page }) => {
   await page.route('**/api/ai-move', async (route) => {
     const request = route.request().postDataJSON()
-    expect(request).toMatchObject({ aiColor: 'white', moveNumber: 1 })
+    expect(request).toMatchObject({ aiColor: 'white', moveNumber: 1, lastMove: { row: 7, col: 7 } })
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ move: { row: 6, col: 7 } }) })
   })
   await page.goto('/')
