@@ -30,14 +30,26 @@ export async function handleAiMove(
 
   try {
     const position = validateMoveRequest(input)
-    const move = await requestGeminiMove({
-      apiKey: environment.GEMINI_API_KEY,
-      model: environment.GEMINI_MODEL || 'gemini-3.8-flash',
-      position,
-      fetcher,
-      signal: AbortSignal.timeout(20_000),
-    })
-    return json({ move }, 200)
+    const models = environment.GEMINI_MODEL
+      ? [environment.GEMINI_MODEL]
+      : ['gemini-3.8-flash', 'gemini-3.7-flash']
+    let lastError: unknown
+    for (const model of models) {
+      try {
+        const move = await requestGeminiMove({
+          apiKey: environment.GEMINI_API_KEY,
+          model,
+          position,
+          fetcher,
+          signal: AbortSignal.timeout(20_000),
+        })
+        return json({ move }, 200)
+      } catch (error) {
+        lastError = error
+        if (error instanceof Error && error.message.includes('무료 사용량')) break
+      }
+    }
+    throw lastError
   } catch (error) {
     const message = error instanceof Error ? error.message : 'AI 착수에 실패했습니다.'
     if (error instanceof MoveRequestError) return json({ error: message }, 400)

@@ -33,6 +33,26 @@ describe('AI move API handler', () => {
     expect(fetcher.mock.calls[0][0]).toContain('gemini-3.8-flash')
   })
 
+  it('falls back once when the current free Flash model is unavailable', async () => {
+    const position = board()
+    position[7][7] = 'black'
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: '{"row":7,"col":8}' }] } }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+
+    const response = await handleAiMove(new Request('https://example.test/api/ai-move', {
+      method: 'POST',
+      body: JSON.stringify({ board: position, aiColor: 'white', moveNumber: 1 }),
+    }), { GEMINI_API_KEY: 'hidden-key' }, fetcher)
+
+    expect(response.status).toBe(200)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(fetcher.mock.calls[0][0]).toContain('gemini-3.8-flash')
+    expect(fetcher.mock.calls[1][0]).toContain('gemini-3.7-flash')
+  })
+
   it('returns a safe message for malformed game input', async () => {
     const response = await handleAiMove(new Request('https://example.test/api/ai-move', {
       method: 'POST', body: JSON.stringify({ board: [] }),
