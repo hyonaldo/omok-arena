@@ -25,7 +25,7 @@ npm run dev
 Vercel Production 환경에 다음 값을 설정합니다.
 
 - `GEMINI_API_KEY`: Google AI Studio API 키
-- `GEMINI_MODEL` (선택): 기본값 `gemini-2.5-flash`
+- `GEMINI_MODEL` (선택): 기본값 `gemini-3.8-flash`
 
 API 키는 브라우저 번들에 포함되지 않고 `/api/ai-move` 서버리스 함수에서만 사용됩니다. 별도 기기별 제한은 없으며 모든 사용자가 해당 Gemini 프로젝트의 무료 할당량을 공유합니다.
 

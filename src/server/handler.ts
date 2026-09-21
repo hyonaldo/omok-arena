@@ -32,7 +32,7 @@ export async function handleAiMove(
     const position = validateMoveRequest(input)
     const move = await requestGeminiMove({
       apiKey: environment.GEMINI_API_KEY,
-      model: environment.GEMINI_MODEL || 'gemini-2.5-flash',
+      model: environment.GEMINI_MODEL || 'gemini-3.8-flash',
       position,
       fetcher,
       signal: AbortSignal.timeout(20_000),

@@ -25,11 +25,12 @@ describe('AI move API handler', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ board: position, aiColor: 'white', moveNumber: 1 }),
-    }), { GEMINI_API_KEY: 'hidden-key', GEMINI_MODEL: 'gemini-test' }, fetcher)
+    }), { GEMINI_API_KEY: 'hidden-key' }, fetcher)
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ move: { row: 7, col: 8 } })
     expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(fetcher.mock.calls[0][0]).toContain('gemini-3.8-flash')
   })
 
   it('returns a safe message for malformed game input', async () => {
