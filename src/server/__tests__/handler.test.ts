@@ -30,7 +30,7 @@ describe('AI move API handler', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ move: { row: 7, col: 8 } })
     expect(response.headers.get('Cache-Control')).toBe('no-store')
-    expect(fetcher.mock.calls[0][0]).toContain('gemini-3.8-flash')
+    expect(fetcher.mock.calls[0][0]).toContain('gemini-3.5-flash')
   })
 
   it('falls back once when the current free Flash model is unavailable', async () => {
@@ -49,8 +49,8 @@ describe('AI move API handler', () => {
 
     expect(response.status).toBe(200)
     expect(fetcher).toHaveBeenCalledTimes(2)
-    expect(fetcher.mock.calls[0][0]).toContain('gemini-3.8-flash')
-    expect(fetcher.mock.calls[1][0]).toContain('gemini-3.7-flash')
+    expect(fetcher.mock.calls[0][0]).toContain('gemini-3.5-flash')
+    expect(fetcher.mock.calls[1][0]).toContain('gemini-3.5-flash-lite')
   })
 
   it('returns a safe message for malformed game input', async () => {

@@ -32,7 +32,7 @@ export async function handleAiMove(
     const position = validateMoveRequest(input)
     const models = environment.GEMINI_MODEL
       ? [environment.GEMINI_MODEL]
-      : ['gemini-3.8-flash', 'gemini-3.7-flash']
+      : ['gemini-3.5-flash', 'gemini-3.5-flash-lite']
     let lastError: unknown
     for (const model of models) {
       try {
