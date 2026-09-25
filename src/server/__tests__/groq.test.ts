@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildGroqRequest,
-  parseGroqMove,
+  parseGroqChoice,
   RateLimitError,
   requestGroqMove,
   validateMoveRequest,
 } from '../groq'
+import { buildCandidates } from '../analysis'
 import type { Cell } from '../../core/types'
 
 const emptyBoard = (): Cell[][] => Array.from({ length: 15 }, () => Array<Cell>(15).fill(null))
@@ -13,6 +14,15 @@ const emptyBoard = (): Cell[][] => Array.from({ length: 15 }, () => Array<Cell>(
 const groqResponse = (content: string) => ({
   choices: [{ message: { role: 'assistant', content } }],
 })
+
+const quietBoard = () => {
+  // 강제수가 없어 모델에게 넘어가는 전형적인 국면.
+  const board = emptyBoard()
+  board[7][7] = 'black'
+  board[6][6] = 'white'
+  board[9][3] = 'black'
+  return board
+}
 
 describe('Groq move server adapter', () => {
   it('accepts only a valid 15 by 15 game position', () => {
@@ -44,69 +54,111 @@ describe('Groq move server adapter', () => {
     expect(() => validateMoveRequest({ board, aiColor: 'white', moveNumber: 1, lastMove: { row: 99, col: 0 } })).toThrow('마지막 수')
   })
 
-  it('describes the position as compact coordinates instead of a text grid', () => {
+  it('accepts a move history only when it matches the board', () => {
     const board = emptyBoard()
     board[7][7] = 'black'
-    board[8][8] = 'black'
-    board[6][7] = 'white'
-    const request = buildGroqRequest({ board, aiColor: 'white', moveNumber: 3, lastMove: { row: 8, col: 8 } }, 'openai/gpt-oss-120b')
+    expect(validateMoveRequest({ board, aiColor: 'white', moveNumber: 1, moves: [{ row: 7, col: 7 }] }).moves)
+      .toEqual([{ row: 7, col: 7 }])
+    // 수순 길이가 착수 수와 다르거나 빈 자리를 가리키면 거절한다.
+    expect(() => validateMoveRequest({ board, aiColor: 'white', moveNumber: 1, moves: [] })).toThrow('수순')
+    expect(() => validateMoveRequest({ board, aiColor: 'white', moveNumber: 1, moves: [{ row: 0, col: 0 }] })).toThrow('수순')
+  })
+
+  it('shows the position as an ascii grid instead of a coordinate list', () => {
+    const board = quietBoard()
+    const candidates = buildCandidates(board, 'white')
+    const request = buildGroqRequest(
+      { board, aiColor: 'white', moveNumber: 3, lastMove: { row: 9, col: 3 } },
+      'openai/gpt-oss-120b',
+      candidates,
+    )
     const userPrompt = request.messages.find((message) => message.role === 'user')!.content
     const systemPrompt = request.messages.find((message) => message.role === 'system')!.content
-    expect(userPrompt).toContain('흑(상대): (7,7) (8,8)')
-    expect(userPrompt).toContain('백(당신): (6,7)')
-    expect(userPrompt).toContain('상대의 마지막 수: (8,8)')
-    expect(userPrompt).not.toContain('...............')
-    expect(systemPrompt).toContain('(행,열)')
-    expect(systemPrompt).toContain('(0,0)')
+
+    // 격자에는 행 번호와 돌 기호가 함께 나타난다.
+    expect(userPrompt).toMatch(/^ 7 .*X/m)
+    expect(userPrompt).toMatch(/^ 6 .*O/m)
+    expect(userPrompt).toContain('상대의 마지막 수: (9,3)')
+    expect(userPrompt).not.toContain('흑(상대): (')
+    expect(systemPrompt).toContain('X는 흑')
   })
 
-  it('builds a strict JSON-schema chat request without arbitrary user prompts', () => {
-    const board = emptyBoard()
-    board[7][7] = 'black'
-    const request = buildGroqRequest({ board, aiColor: 'white', moveNumber: 1 }, 'openai/gpt-oss-20b')
-    expect(request.model).toBe('openai/gpt-oss-20b')
-    expect(request.reasoning_effort).toBe('low')
-    expect(request.response_format).toMatchObject({
-      type: 'json_schema',
-      json_schema: {
-        strict: true,
-        schema: {
-          additionalProperties: false,
-          required: ['row', 'col'],
-          properties: {
-            row: { minimum: 0, maximum: 14 },
-            col: { minimum: 0, maximum: 14 },
-          },
-        },
-      },
-    })
+  it('includes the recent move order when the client sends it', () => {
+    const board = quietBoard()
+    const request = buildGroqRequest(
+      { board, aiColor: 'white', moveNumber: 3, moves: [{ row: 7, col: 7 }, { row: 6, col: 6 }, { row: 9, col: 3 }] },
+      'openai/gpt-oss-120b',
+      buildCandidates(board, 'white'),
+    )
     const userPrompt = request.messages.find((message) => message.role === 'user')!.content
-    expect(userPrompt).toContain('(7,7)')
-    expect(userPrompt).toContain('백(당신): 없음')
+    expect(userPrompt).toContain('최근 수순: X(7,7) → O(6,6) → X(9,3)')
   })
 
-  it('parses a legal move and repairs an occupied output to the nearest legal point', () => {
-    const board = emptyBoard()
-    board[7][7] = 'black'
-    expect(parseGroqMove(groqResponse('{"row":7,"col":8}'), board)).toEqual({ row: 7, col: 8 })
-    expect(parseGroqMove(groqResponse('{"row":7,"col":7}'), board)).toEqual({ row: 6, col: 7 })
-    expect(() => parseGroqMove({ choices: [] }, board)).toThrow('응답')
+  it('offers scored candidate ids and asks the model to reason before choosing', () => {
+    const board = quietBoard()
+    const candidates = buildCandidates(board, 'white')
+    const request = buildGroqRequest({ board, aiColor: 'white', moveNumber: 3 }, 'openai/gpt-oss-20b', candidates)
+
+    expect(request.model).toBe('openai/gpt-oss-20b')
+    expect(request.reasoning_effort).toBe('medium')
+
+    const schema = request.response_format.json_schema.schema as {
+      required: string[]
+      properties: { choice: { enum: string[] } }
+    }
+    // reasoning 이 choice 보다 먼저 와야 고르기 전에 생각할 공간이 생긴다.
+    expect(schema.required).toEqual(['reasoning', 'choice'])
+    expect(schema.properties.choice.enum).toEqual(candidates.map((candidate) => candidate.id))
+    expect(request.response_format.json_schema.strict).toBe(true)
+
+    const userPrompt = request.messages.find((message) => message.role === 'user')!.content
+    expect(userPrompt).toContain(` ${candidates[0].id}: (${candidates[0].position.row},${candidates[0].position.col})`)
+  })
+
+  it('maps the chosen id back to its coordinate and rejects anything off the list', () => {
+    const board = quietBoard()
+    const candidates = buildCandidates(board, 'white')
+    const target = candidates[1]
+
+    expect(parseGroqChoice(groqResponse(`{"reasoning":"연결","choice":"${target.id}"}`), candidates))
+      .toEqual(target.position)
+    expect(() => parseGroqChoice(groqResponse('{"reasoning":"x","choice":"ZZ"}'), candidates)).toThrow('후보에 없는')
+    expect(() => parseGroqChoice({ choices: [] }, candidates)).toThrow('응답')
+  })
+
+  it('never asks the model when the candidate list collapses to one point', async () => {
+    // 한 자리만 비운 판: 물어볼 것이 없으므로 네트워크를 타지 않는다.
+    const board: Cell[][] = Array.from({ length: 15 }, (_, row) =>
+      Array.from({ length: 15 }, (_, col) => (row === 0 && col === 0 ? null : (row + col) % 2 ? 'black' : 'white')))
+    const fetcher = vi.fn()
+
+    const move = await requestGroqMove({
+      apiKey: 'unused-key',
+      model: 'openai/gpt-oss-120b',
+      position: { board, aiColor: 'white', moveNumber: 224 },
+      fetcher,
+    })
+
+    expect(move).toEqual({ row: 0, col: 0 })
+    expect(fetcher).not.toHaveBeenCalled()
   })
 
   it('sends the API key only as a bearer header and maps 429 to a quota message', async () => {
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(groqResponse('{"row":6,"col":7}')), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }))
+    const board = quietBoard()
+    const candidates = buildCandidates(board, 'white')
+    const fetcher = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify(groqResponse(`{"reasoning":"중앙 연결","choice":"${candidates[0].id}"}`)),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ))
 
     const move = await requestGroqMove({
       apiKey: 'secret-test-key',
       model: 'openai/gpt-oss-20b',
-      position: { board: emptyBoard(), aiColor: 'white', moveNumber: 0 },
+      position: { board, aiColor: 'white', moveNumber: 3 },
       fetcher,
     })
 
-    expect(move).toEqual({ row: 6, col: 7 })
+    expect(move).toEqual(candidates[0].position)
     const [url, init] = fetcher.mock.calls[0]
     expect(url).toBe('https://api.groq.com/openai/v1/chat/completions')
     expect(url).not.toContain('secret-test-key')
@@ -114,9 +166,9 @@ describe('Groq move server adapter', () => {
 
     const limited = vi.fn().mockResolvedValue(new Response('{}', { status: 429, headers: { 'retry-after': '12' } }))
     const failure = await requestGroqMove({
-      apiKey: 'k',
+      apiKey: 'secret-test-key',
       model: 'openai/gpt-oss-20b',
-      position: { board: emptyBoard(), aiColor: 'white', moveNumber: 0 },
+      position: { board, aiColor: 'white', moveNumber: 3 },
       fetcher: limited,
     }).catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(RateLimitError)

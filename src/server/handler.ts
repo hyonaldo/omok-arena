@@ -1,3 +1,4 @@
+import { decideForcedMove } from './analysis'
 import { MoveRequestError, RateLimitError, requestGroqMove, validateMoveRequest } from './groq'
 
 type GroqEnvironment = {
@@ -41,6 +42,12 @@ export async function handleAiMove(
 
   try {
     const position = validateMoveRequest(input)
+
+    // 5목·열린4·양수걸침처럼 답이 하나로 정해지는 국면은 수읽기로 즉시 결정한다.
+    // LLM을 부르지 않으므로 빠르고, 무료 티어 요청 수도 아낀다.
+    const forced = decideForcedMove(position.board, position.aiColor)
+    if (forced) return json({ move: forced.position, source: 'search', reason: forced.reason }, 200)
+
     const attempt = () => requestGroqMove({
       apiKey,
       model: environment.GROQ_MODEL || DEFAULT_GROQ_MODEL,
@@ -49,11 +56,11 @@ export async function handleAiMove(
       signal: AbortSignal.timeout(20_000),
     })
     try {
-      return json({ move: await attempt() }, 200)
+      return json({ move: await attempt(), source: 'model' }, 200)
     } catch (error) {
       if (!(error instanceof RateLimitError) || error.retryAfterSeconds > MAX_INLINE_WAIT_SECONDS) throw error
       await sleep(error.retryAfterSeconds * 1000)
-      return json({ move: await attempt() }, 200)
+      return json({ move: await attempt(), source: 'model' }, 200)
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'AI 착수에 실패했습니다.'

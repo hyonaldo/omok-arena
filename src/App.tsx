@@ -76,6 +76,8 @@ export default function App() {
         aiColor: 'white',
         moveNumber: position.moves.length,
         lastMove: last ? { row: last.row, col: last.col } : undefined,
+        // 수순을 함께 보내면 서버가 상대 의도를 읽는 단서로 쓴다.
+        moves: position.moves.map(({ row, col }) => ({ row, col })),
       })
 
       let data: { move?: Position; error?: string; retryAfter?: number } = {}
